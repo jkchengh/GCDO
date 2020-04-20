@@ -78,10 +78,10 @@ def conflicts2clauses(C):
     return Phi
 
 
-def cdito(L, P, Phi, h):
+def gcdito(L, P, Phi, h):
     n_minus1 = len(L) - 1
     times = 0
-    while P and times < 100:
+    while P:
         times = times + 1
         print("\n")
         print("#", times)
