@@ -1,11 +1,10 @@
-from utils import move
-
+from math import *
 
 def next_move(L, C, i, j, l):
     n = len(L)
     n_minus1 = n - 1
-    # compute the constituent kernel for search status
-    # as the incumbent combined kenerl
+    # compute the constituent resolution for search status
+    # as the incumbent combined resolution
 
     if (n_minus1 * i + j >= n_minus1 * l):
         idx_l = L.index(l)
@@ -14,61 +13,43 @@ def next_move(L, C, i, j, l):
         (next_i, next_j) = (i, j + 1)
     else:
         (next_i, next_j) = (i + 1, i + 2)
-    print("Constituent Kernel", next_i, "->", next_j, "for statuts (", i, j, l, ")")
-    # compute constituent kernel for every conflict
+    # print("Constituent Resolution", next_i, "->", next_j, "for statuts (", i, j, l, ")")
+    # compute constituent resolution for every conflict
     for c in C:
         (cons_i, cons_j) = (n_minus1, n_minus1 + 1)
         for (a, b) in c:
             (idx_a, idx_b) = (L.index(a), L.index(b))
-            # break if the conflict is resolved by the incumbent combined kernel
+            # break if the conflict is resolved by the incumbent combined resolution
             if (a <= l) and (n * idx_a + idx_b) <= (n * next_i + next_j):
                 (cons_i, cons_j) = (0, 0)
                 break
-            # update the constituent kernel
+            # update the constituent resolution
             if (a <= l) and (n * idx_a + idx_b) < (n * cons_i + cons_j):
                 (cons_i, cons_j) = (idx_a, idx_b)
-        print("Constituent Kernel", cons_i, "->", cons_j, "for conflict", c)
+        # print("Constituent Resolution", cons_i, "->", cons_j, "for conflict", c)
         # break when a unsolvable conflict is detected
         if cons_i > l: return (n_minus1, n_minus1 + 1)
-        # update the combined kernel
+        # update the combined resolution
         if (n * next_i + next_j) < (n * cons_i + cons_j):
             (next_i, next_j) = (cons_i, cons_j)
-    # print("Combined Kernel:", next_i, "->", next_j)
+    # print("Combined Resolution:", next_i, "->", next_j)
     return (next_i, next_j)
 
-
-def phi_consistent(L, Phi):
-    for phi in Phi:
-        phi_consistent = False
-        for (a, b) in phi:
+def manifest_conflicts(L, C):
+    CL = []
+    for c in C:
+        manifest = True
+        for (a, b) in c:
             (idx_a, idx_b) = (L.index(a), L.index(b))
-            if idx_a < idx_b:
-                phi_consistent = True
+            if idx_a > idx_b:
+                manifest = False
                 break
-        if not phi_consistent:
-            # print("Inconsistent! Violate ", phi)
-            return False
-    # print("Phi Consistent!")
-    return True
-
-
-def phi_conflicts(L, Phi):
-    C = []
-    for phi in Phi:
-        c = []
-        for (a, b) in phi:
-            (idx_a, idx_b) = (L.index(a), L.index(b))
-            c.append((b, a))
-            if idx_a < idx_b:
-                c = []
-                break
+        if manifest == True: C.append(c)
         # print("Conflict:", c, "for ", phi)
-        if c: C.append(c)
-    print("Conflict:", C)
-    return C
+    # print("Conflict:", C)
+    return CL
 
-
-def conflicts2clauses(C):
+def negate(C):
     Phi = []
     for c in C:
         phi = []
@@ -77,28 +58,39 @@ def conflicts2clauses(C):
         Phi.append(phi)
     return Phi
 
+def move(L, i, j):
+    newL = L.copy()
+    p = newL.pop(i)
+    if i < j:
+        newL.insert(j, p)
+    else:
+        newL.insert(j+1, p)
+    return newL
 
-def gcdito(L, P, Phi, h):
+def bbcdito(L, P, h, f, C, rdo_f):
     n_minus1 = len(L) - 1
     times = 0
+    inc_f, inc_L = - inf, []
     while P:
         times = times + 1
         print("\n")
         print("#", times)
         print("L =", L)
         print("P =", P)
-        # print("Phi = ", Phi)
-        if phi_consistent(L, Phi):
-            (h_consistent, Ch) = h(L)
-            if h_consistent:
-                print("Solution Found")
-                return L
-            else:
-                Phi = Phi + conflicts2clauses(Ch)
+        CL = manifest_conflicts(L, C)
+        h_consistent, Ch = h(L)
+        if CL == [] and h_consistent:
+            print("Solution Found")
+            # Update Incumbent if Better Solution Found
+            fL = f('all', L)
+            print("Objective = ", fL)
+            if fL > inc_f: inc_f, inc_L = fL, L
         (i, j, l) = P[-1]
-        C = phi_conflicts(L, Phi)
-        (next_i, next_j) = next_move(L, C, i, j, l)
-        print("Combined Kernel:", next_i, "->", next_j)
+        print("Conflicts [CL]:", CL)
+        print("Conflicts [Ch]:", Ch)
+        (next_i, next_j) = next_move(L, Ch+CL, i, j, l)
+
+        print("Combined Resolution:", next_i, "->", next_j)
         if next_i < l:
             L = move(L, next_i, next_j)
             P[-1] = (next_i, next_j, l)
@@ -116,5 +108,5 @@ def gcdito(L, P, Phi, h):
                 if next_i == n_minus1:
                     print("[Type 3] Update Parent's Status for Pruning")
                     P[-1] = (parent_i + 1, parent_i + 1, parent_l)
-    print("No Solution!")
-    return []
+
+    return [inc_L, inc_f, C]

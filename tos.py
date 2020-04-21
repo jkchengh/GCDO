@@ -1,6 +1,3 @@
-from utils import move
-
-
 def tos(n):
     n_minus1 = n - 1
     L = list(range(0, n))
@@ -29,3 +26,12 @@ def tos(n):
                 L = move(L, parent_j, parent_i - 1)
                 print("Backtrack to", L, "by taking", "(" + repr(parent_j) + " ," + repr(parent_i - 1) + ")")
     return O
+
+def move(L, i, j):
+    newL = L.copy()
+    p = newL.pop(i)
+    if i < j:
+        newL.insert(j, p)
+    else:
+        newL.insert(j+1, p)
+    return newL
