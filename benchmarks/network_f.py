@@ -6,22 +6,20 @@ from itertools import product
 def make_TNCP_f(portion, L, flows, edges, tcs, node_num, horizon):
 
     # find level
-    for e in L:
-        if e != L[e]:
-            l = e
-            break
+    l = level(L)
 
     # find events
-    if portion == "fixed": events = L[l:-1]
-    elif portion == "all": events = L
+    if portion == "assigned": L = [e for e in L if e > l]
+    elif portion == "all": L = L
 
+    events = L
     flows = [flow for flow in flows if (2*flow[0]) in events and (2*flow[0]+1) in events]
     tcs = [tc for tc in tcs if tc[0] in events and tc[1] in events]
     weights = [flow[7] for flow in flows]
 
-    print("-- Check All Constraints")
-    print("Scoped Flows:", [flow[0] for flow in flows])
-    print("Scoped Events:", events)
+    # print("-- Check All Constraints")
+    # print("Scoped Flows:", [flow[0] for flow in flows])
+    # print("Scoped Events:", events)
     if events == []:
         print("No Scoped Constraints")
         return 0
@@ -44,6 +42,7 @@ def make_TNCP_f(portion, L, flows, edges, tcs, node_num, horizon):
     # Find Dropped Flows
     dropped_flows = [flow for flow in flows if L.index(2*flow[0]+1) < L.index(2*flow[0])]
     for flow in dropped_flows: problem.addConstr(vars['F%s' % (flow[0])] == 0)
+    # print("Dropped:", [flow[0] for flow in dropped_flows])
 
     # Temporal Constraints
     for flow in flows:
@@ -60,39 +59,40 @@ def make_TNCP_f(portion, L, flows, edges, tcs, node_num, horizon):
     # State Constraints
     act_flow_sequence = []
     act_flows = []
+    peak = []
     change = 'up'
-    for i in range(len(events)):
+    for i in range(len(L)):
         event = L[i]
         flow = []
         for f in flows:
             if f[0] == int(floor(event / 2)): flow = f
         # some flows start
-        # print("Index[%s]"%(i), "Change[%s]"%(change), "Flow[%s]"%(f))
-        if flow != []:
+        # print("Index[%s]"%(i), "Event[%s]"%(event), "Change[%s]"%(change), "Flow[%s]"%(flow))
+        if flow != [] and not flow in dropped_flows:
             if event % 2 == 0:
                 if change == 'down': act_flow_sequence.append(peak.copy())
                 change = 'up'
-                if not flow in dropped_flows: act_flows.append(flow)
+                act_flows.append(flow)
             # some flows end
             else:
                 if change == 'up': peak = act_flows.copy()
                 change = 'down'
-                if not flow in dropped_flows: act_flows.remove(flow)
-        if i == len(events) - 1: act_flow_sequence.append(peak.copy())
+                act_flows.remove(flow)
+        if i == len(events) - 1 and peak != []:
+            act_flow_sequence.append(peak.copy())
 
 
     for act_flows in act_flow_sequence:
         add_NCP(problem, vars, act_flows, edges, node_num)
 
-
-
-    for act_flows in act_flow_sequence: print("Flow Main Component Sequence", [flow[0] for flow in act_flows])
-    print("Weights", weights)
+    # for act_flows in act_flow_sequence: print("Flow Main Component Sequence", [flow[0] for flow in act_flows])
+    # print("Weights", weights)
 
     problem.optimize()
-    for flow in flows: print(vars['F%s' % (flow[0])].X, "Flow(%s)"%(flow[0]), "Weight(%s)"%(weights[flow[0]]))
+    # for flow in flows: print(vars['F%s' % (flow[0])].X, "Flow(%s)"%(flow[0]))
     return problem.objVal
 
+###
 def add_NCP(problem, cond_vars, flows, edges, node_num):
     vars = {}
 
@@ -166,3 +166,8 @@ def add_NCP(problem, cond_vars, flows, edges, node_num):
             delay_from = vars['FD%s(%s)' % (idx, i)]
             delay_to = vars['FD%s(%s)' % (idx, j)]
             problem.addConstr(delay_to - delay_from + 1e6 * (2 - flow_var - routing_var) >= edges[i][j][3])
+
+def level(L):
+    for l in range(len(L)):
+        if l != L[l]: return l
+    return len(L) - 1

@@ -5,13 +5,13 @@ from itertools import product
 from benchmarks.network_h import *
 from benchmarks.network_f import *
 
-def generate_TNCP(flow_num = 2, node_num = 3, tc_num = 0, horizon = 3000,
-                  edge_loss_lb = 0.1, edge_loss_ub = 0.3,
-                  edge_delay_lb = 0.1, edge_delay_ub = 0.3,
+def generate_TNCP(flow_num = 20, node_num = 3, tc_num = 0, horizon = 3000,
+                  edge_loss_lb = 0.08, edge_loss_ub = 0.08,
+                  edge_delay_lb = 0.08, edge_delay_ub = 0.08,
                   edge_bw_lb = 500, edge_bw_ub = 500,
                   flow_loss_lb = 0.2, flow_loss_ub= 0.6,
                   flow_delay_lb = 0.2, flow_delay_ub = 0.6,
-                  flow_bw_lb = 300, flow_bw_ub = 500,
+                  flow_bw_lb = 300, flow_bw_ub = 300,
                   flow_duration_lb = 20, flow_duration_ub = 80):
     # Flows
     flows = []
@@ -68,7 +68,8 @@ def solve_TNCP(flows, edges, tcs, node_num, horizon):
     event_num = 2 * flow_num
     h = lambda L: make_TNCP_h(L, flows, edges, tcs, node_num, horizon)
     f = lambda portion, L: make_TNCP_f(portion, L, flows, edges, tcs, node_num, horizon)
-    L = rdo(1, event_num, h, f)
+    # L = rdo(1, event_num, 2, h, f)
+    L = bbcdito(event_num, h, f, [], [])
     return L
 
 flows, edges, tcs, node_num, horizon = generate_TNCP()

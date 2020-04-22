@@ -1,6 +1,5 @@
 from math import *
 from gurobi import *
-from util.partial_orders import *
 from itertools import product
 
 def make_TNCP_h(L, flows, edges, tcs, node_num, horizon):
@@ -11,28 +10,28 @@ def make_TNCP_h(L, flows, edges, tcs, node_num, horizon):
     tcs = [tcs[i] for i in range(len(tcs))
            if tcs[i][0] in events and tcs[i][1] in events]
     event_num = len(events)
-    print("-- Check Mandatory Constraints")
-    print("Mandatory Flows:", [flow[0] for flow in flows])
-    print("Mandatory Events:", events)
+    # print("-- Check Mandatory Constraints")
+    # print("Mandatory Flows:", [flow[0] for flow in flows])
+    # print("Mandatory Events:", events)
     if events == []:
-        print("No Mandatory Constraints")
+        # print("No Mandatory Constraints")
         return [True, []]
 
     # Partial orders
     Phi = extract_TNCP_Phi(events, flows, tcs)
-    print("Print Phi")
+    # print("Print Phi")
     for phi in Phi: print(phi)
     C = phi_conflicts(L, Phi)
     if C != []:
-        print("Ordering Inconsistent!")
+        # print("Ordering Inconsistent!")
         return [False, C]
-    print("Ordering Consistent!")
+    # print("Ordering Consistent!")
 
     # Time
     if not solve_Time(L, events, flows, tcs, horizon):
-        print("Temporally Consistent!")
+        # print("Temporally Consistent!")
         return [False, []]
-    print("Temporally Consistent!")
+    # print("Temporally Consistent!")
 
     # State
     act_flows = []
@@ -46,14 +45,14 @@ def make_TNCP_h(L, flows, edges, tcs, node_num, horizon):
             if event % 2 == 0:
                 act_flows.append(flow)
                 if not solve_NCP(act_flows, edges, node_num):
-                    print("State Inconsistent!")
+                    # print("State Inconsistent!")
                     conflicts = []
                     for flow_i, flow_j in product(act_flows, act_flows):
                         conflicts.append([(2 * flow_i[0], 2 * flow_j[0] + 1)])
                     return (False, conflicts)
             # some flows end
             else: act_flows.remove(flow)
-    print("State Consistent!")
+    # print("State Consistent!")
 
     return [True, []]
 
@@ -108,7 +107,7 @@ def solve_Time(L, events, flows, tcs, horizon):
     else: return False
 
 def solve_NCP(flows, edges, node_num):
-    print("Solve NCP with size F", len(flows), 'N', node_num)
+    # print("Solve NCP with size F", len(flows), 'N', node_num)
     problem = Model("NCP")
     problem.setParam(GRB.Param.OutputFlag, 0)
     vars= {}
@@ -181,3 +180,32 @@ def solve_NCP(flows, edges, node_num):
 
     if problem.status == GRB.OPTIMAL: return True
     else: return False
+
+def phi_consistent(L, Phi):
+    for phi in Phi:
+        phi_consistent = False
+        for (a, b) in phi:
+            (idx_a, idx_b) = (L.index(a), L.index(b))
+            if idx_a < idx_b:
+                phi_consistent = True
+                break
+        if not phi_consistent:
+            # print("Inconsistent! Violate ", phi)
+            return False
+    # print("Phi Consistent!")
+    return True
+
+def phi_conflicts(L, Phi):
+    C = []
+    for phi in Phi:
+        c = []
+        for (a, b) in phi:
+            (idx_a, idx_b) = (L.index(a), L.index(b))
+            c.append((b, a))
+            if idx_a < idx_b:
+                c = []
+                break
+        # print("Conflict:", c, "for ", phi)
+        if c: C.append(c)
+    # print("Conflict:", C)
+    return C
