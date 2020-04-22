@@ -121,7 +121,7 @@ def manifest_conflicts(L, C):
             if idx_a > idx_b:
                 manifest = False
                 break
-        if manifest == True: C.append(c)
+        if manifest == True: CL.append(c)
         # print("Conflict:", c, "for ", phi)
     # print("Conflict:", C)
     return CL
@@ -144,7 +144,7 @@ def move(L, i, j):
         elif i > j: newL.insert(j+1, p)
     return newL
 
-def bbcdito(n, h, f, C, rdo_f):
+def bbo(n, h, f, C, rdo_f):
     L = list(range(n))
     times = 0
     inc_f, inc_L = f("all", L), L

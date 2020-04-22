@@ -17,9 +17,9 @@ def make_TNCP_f(portion, L, flows, edges, tcs, node_num, horizon):
     tcs = [tc for tc in tcs if tc[0] in events and tc[1] in events]
     weights = [flow[7] for flow in flows]
 
-    # print("-- Check All Constraints")
-    # print("Scoped Flows:", [flow[0] for flow in flows])
-    # print("Scoped Events:", events)
+    print("-- Check All Constraints")
+    print("Scoped Flows:", [flow[0] for flow in flows])
+    print("Scoped Events:", events)
     if events == []:
         print("No Scoped Constraints")
         return 0

@@ -1,4 +1,4 @@
-from rdo import *
+from crdo import *
 from random import *
 from itertools import product
 
@@ -11,7 +11,7 @@ def generate_TNCP(flow_num = 20, node_num = 3, tc_num = 0, horizon = 3000,
                   edge_bw_lb = 500, edge_bw_ub = 500,
                   flow_loss_lb = 0.2, flow_loss_ub= 0.6,
                   flow_delay_lb = 0.2, flow_delay_ub = 0.6,
-                  flow_bw_lb = 300, flow_bw_ub = 300,
+                  flow_bw_lb = 300, flow_bw_ub = 600,
                   flow_duration_lb = 20, flow_duration_ub = 80):
     # Flows
     flows = []
@@ -26,9 +26,8 @@ def generate_TNCP(flow_num = 20, node_num = 3, tc_num = 0, horizon = 3000,
         bw = uniform(flow_bw_lb, flow_bw_ub)
         duration = uniform(flow_duration_lb, flow_duration_ub)
 
-        weight = randint(1, flow_num)
-        if weight <= 0.7 * flow_num: weight = -1e6
-        else: weight = - weight
+        if i <= 0.5 * flow_num: weight = -1e6
+        else: weight = - randint(1, flow_num)
         flows.append([i, src, dst, loss, delay, bw, duration, weight])
 
     # Edges
@@ -68,8 +67,8 @@ def solve_TNCP(flows, edges, tcs, node_num, horizon):
     event_num = 2 * flow_num
     h = lambda L: make_TNCP_h(L, flows, edges, tcs, node_num, horizon)
     f = lambda portion, L: make_TNCP_f(portion, L, flows, edges, tcs, node_num, horizon)
-    # L = rdo(1, event_num, 2, h, f)
-    L = bbcdito(event_num, h, f, [], [])
+    L = crdo(1, event_num, 2, h, f)
+    # L = bbo(event_num, h, f, [], [])
     return L
 
 flows, edges, tcs, node_num, horizon = generate_TNCP()

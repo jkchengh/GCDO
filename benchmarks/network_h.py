@@ -10,9 +10,9 @@ def make_TNCP_h(L, flows, edges, tcs, node_num, horizon):
     tcs = [tcs[i] for i in range(len(tcs))
            if tcs[i][0] in events and tcs[i][1] in events]
     event_num = len(events)
-    # print("-- Check Mandatory Constraints")
-    # print("Mandatory Flows:", [flow[0] for flow in flows])
-    # print("Mandatory Events:", events)
+    print("-- Check Mandatory Constraints")
+    print("Mandatory Flows:", [flow[0] for flow in flows])
+    print("Mandatory Events:", events)
     if events == []:
         # print("No Mandatory Constraints")
         return [True, []]
@@ -20,18 +20,18 @@ def make_TNCP_h(L, flows, edges, tcs, node_num, horizon):
     # Partial orders
     Phi = extract_TNCP_Phi(events, flows, tcs)
     # print("Print Phi")
-    for phi in Phi: print(phi)
+    # for phi in Phi: print(phi)
     C = phi_conflicts(L, Phi)
     if C != []:
-        # print("Ordering Inconsistent!")
+        print("Ordering Inconsistent!")
         return [False, C]
-    # print("Ordering Consistent!")
+    print("Ordering Consistent!")
 
     # Time
     if not solve_Time(L, events, flows, tcs, horizon):
-        # print("Temporally Consistent!")
+        print("Temporally Consistent!")
         return [False, []]
-    # print("Temporally Consistent!")
+    print("Temporally Consistent!")
 
     # State
     act_flows = []
@@ -45,14 +45,14 @@ def make_TNCP_h(L, flows, edges, tcs, node_num, horizon):
             if event % 2 == 0:
                 act_flows.append(flow)
                 if not solve_NCP(act_flows, edges, node_num):
-                    # print("State Inconsistent!")
+                    print("State Inconsistent!")
                     conflicts = []
                     for flow_i, flow_j in product(act_flows, act_flows):
                         conflicts.append([(2 * flow_i[0], 2 * flow_j[0] + 1)])
                     return (False, conflicts)
             # some flows end
             else: act_flows.remove(flow)
-    # print("State Consistent!")
+    print("State Consistent!")
 
     return [True, []]
 
