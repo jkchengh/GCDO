@@ -1,5 +1,5 @@
-# GCDITO
+# CRDO
 
-This is a code repository of the algorithm Generalized Conflict-directed Incremental Total Ordering (GCDITO).
+This is a code repository of the algorithm Conflict-aware Russian Doll Ordering (CRDO).
 
 
