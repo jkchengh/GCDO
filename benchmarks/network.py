@@ -1,9 +1,12 @@
 from crdo import *
 from random import *
+from time import *
+from timeit import *
 from itertools import product
 
 from benchmarks.network_h import *
 from benchmarks.network_f import *
+from util import *
 
 def generate_TNCP(flow_num = 20, node_num = 3, tc_num = 0, horizon = 3000,
                   edge_loss_lb = 0.08, edge_loss_ub = 0.08,
@@ -62,15 +65,40 @@ def generate_TNCP(flow_num = 20, node_num = 3, tc_num = 0, horizon = 3000,
 
     return [flows, edges, tcs, node_num, horizon]
 
-def solve_TNCP(flows, edges, tcs, node_num, horizon):
+
+
+# Tests
+def solve_TNCP(flows, edges, tcs, node_num, horizon, alg):
     flow_num = len(flows)
     event_num = 2 * flow_num
     h = lambda L: make_TNCP_h(L, flows, edges, tcs, node_num, horizon)
     f = lambda portion, L: make_TNCP_f(portion, L, flows, edges, tcs, node_num, horizon)
-    L = crdo(1, event_num, 2, h, f)
-    # L = bbo(event_num, h, f, [], [])
-    return L
+    if alg == "cdro": return crdo(1, event_num, 2, h, f)
+    if alg == "bbo": return bbo(event_num, h, f, [], [])
 
-flows, edges, tcs, node_num, horizon = generate_TNCP()
+cases = 1
+node_num = 5
+f = open("Cases%s_Nodes%s.txt"%(cases, node_num), "a")
 
-solve_TNCP(flows, edges, tcs, node_num, horizon)
+for flow_num in [3, 6, 9, 12, 15]:
+    f.write("\n#Flows = %s"%(flow_num))
+    for case in range(cases):
+        flows, edges, tcs, node_num, horizon \
+            = generate_TNCP(flow_num = flow_num, node_num = node_num, tc_num = 0, horizon = 3000,
+                              edge_loss_lb = 0.08, edge_loss_ub = 0.08,
+                              edge_delay_lb = 0.08, edge_delay_ub = 0.08,
+                              edge_bw_lb = 500, edge_bw_ub = 500,
+                              flow_loss_lb = 0.2, flow_loss_ub= 0.6,
+                              flow_delay_lb = 0.2, flow_delay_ub = 0.6,
+                              flow_bw_lb = 400, flow_bw_ub = 550,
+                              flow_duration_lb = 20, flow_duration_ub = 80)
+
+        # cdro
+        start = default_timer()
+        [L, fL, total_times] = solve_TNCP(flows, edges, tcs, node_num, horizon, 'cdro')
+        f.write("\n[CDRO] Obj=%s #O=%s Time=%s"%(fL, total_times, default_timer() - start))
+        start = default_timer()
+        [L, fL, C, total_times] = solve_TNCP(flows, edges, tcs, node_num, horizon, 'bbo')
+        f.write("\n[BBO]  Obj=%s #O=%s Time=%s"%(fL, total_times, default_timer() - start))
+f.close()
+
