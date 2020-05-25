@@ -8,10 +8,10 @@ def make_TNCP_h(L, flows, edges, tcs, node_num, horizon):
     if L == [1, 2, 3, 0, 4]:
         O["Time%s" % (L)] = {"name": "Time%s" % (L),
                              "PO": [(2, 0), (3, 0)],
-                             "CS": ["Time"],
-                             "MVS": ["Time"],
-                             "MVC": 1e6}
-        return 1e6, O
+                             "CS": ["Time", "T0", "T1"],
+                             "MVS": ["T1"],
+                             "MVC": 1}
+        return 1, O
     # Partial Orders
     O.update(extractO_order(L, flows))
     # cost = sum([o["MVC"] for o in O.values()])
@@ -52,10 +52,26 @@ def extractO_time(L, flows, tcs, horizon):
     for flow in flows:
         idx, from_event, to_event = flow[0], flow[1], flow[2]
         problem.addConstr(vars['E%s' % (from_event)] + flow[8] <= vars['E%s' % (to_event)])
-    for dtc in tcs:
-        if len(dtc) == 1:
-            from_idx, to_idx, lb = dtc[0]
-            problem.addConstr(vars['E%s' % (from_idx)] <= vars['E%s' % (to_idx)])
+
+    for idx in range(len(L) - 1):
+        problem.addConstr(vars['E%s' % (L[idx])] <= vars['E%s' % (L[idx + 1])])
+
+    tc_vars, weights, indices = [], [], []
+    for dtc_idx in range(len(tcs)):
+        weight, dtc = tcs[dtc_idx]
+        if weight < 1e6:
+            tc_var = problem.addVar(vtype=GRB.BINARY)
+            tc_vars.append(tc_var)
+            weights.append(weight)
+            indices.append(dtc_idx)
+            flags = problem.addVars(len(dtc), vtype=GRB.BINARY)
+            problem.addConstr(flags.sum() >= 1)
+            for tc_idx in range(len(dtc)):
+                from_idx, to_idx, lb = dtc[tc_idx]
+                problem.addConstr(vars['E%s' % (from_idx)] + lb
+                                  - 1e6 * (1 - flags[tc_idx])
+                                  - 1e6 * (1 - tc_var)
+                                  <= vars['E%s' % (to_idx)])
         else:
             flags = problem.addVars(len(dtc), vtype = GRB.BINARY)
             problem.addConstr(flags.sum() >= 1)
@@ -63,13 +79,17 @@ def extractO_time(L, flows, tcs, horizon):
                 from_idx, to_idx, lb = dtc[tc_idx]
                 problem.addConstr(vars['E%s' % (from_idx)] + lb - 1e6 * (1 - flags[tc_idx])
                                   <= vars['E%s' % (to_idx)])
-    for idx in range(len(L) - 1):
-        problem.addConstr(vars['E%s' % (L[idx])] <= vars['E%s' % (L[idx + 1])])
-    problem.write("Time.lp")
+    problem.setObjective(sum(weights) - LinExpr(weights, tc_vars), GRB.MINIMIZE)
     problem.optimize()
     if (problem.status == GRB.OPTIMAL):
         print("- Temporal Consistent")
-        return []
+        CS = ["Time"] + ["T%s" % (indices[idx]) for idx in range(len(indices))]
+        MVS = ["T%s" % (indices[idx]) for idx in range(len(indices)) if tc_vars[idx].x < 1e-3]
+        return {"Time%s" % (L): {"name": "Time%s" % (L),
+                                 "PO": [(L[idx], L[idx + 1]) for idx in range(len(L) - 1)],
+                                 "CS": CS,
+                                 "MVS": MVS,
+                                 "MVC": problem.objVal}}
     else:
         print("- Temporal Inconsistent")
         return {"Time%s"%(L): {"name": "Time%s"%(L),

@@ -14,17 +14,16 @@ def level(L):
 def first_resolving_move(o, L):
     print("# - Search Resolving Move for [%s]"%(o))
     n = len(L)
-    nminus1 = n - 1
     l = level(L)
-    (i, j) = (nminus1, nminus1 + 1)
+    (i, j) = (n, n)
     for (a, b) in o:
         (idx_a, idx_b) = (L.index(a), L.index(b))
         # update the move
         if (a <= l) and (n * idx_a + idx_b) < (n * i + j):
             (i, j) = (idx_a, idx_b)
     if L[i] > l:
-        print("# - [Fail] Find Move (%s -> %s)"%(nminus1, nminus1+1))
-        return (nminus1, nminus1 + 1)
+        print("# - [Fail] Find Move (%s -> %s)"%(n, n))
+        return (n, n)
     else:
         print("# - [Succeed] Find Move (%s -> %s)"%(i, j))
         return (i, j)
@@ -32,14 +31,13 @@ def first_resolving_move(o, L):
 def first_reducing_move(reducing_moves, reduction, n):
     print("# - Search Reducing Move for Reduction %s"%(reduction))
     for move in reducing_moves: print("# -- Reducing [%s] through (%s -> %s)"%(move[1], move[0][0], move[0][1]))
-    nminus1 = n - 1
     for i in range(len(reducing_moves)):
         reduction = reduction - reducing_moves[i][1]
         if reduction < 0:
             print("# - [Succeed] Find Move (%s -> %s)" % (reducing_moves[i][0][0], reducing_moves[i][0][1]))
             return reducing_moves[i][0]
-    print("# - [Fail] Find Move (%s -> %s)" % (nminus1, nminus1 + 1))
-    return (nminus1, nminus1 + 1)
+    print("# - [Fail] Find Move (%s -> %s)" % (n, n))
+    return (n, n)
 
 def manifest_orderings(L, Phi, O):
 
@@ -105,8 +103,8 @@ def gcdo(n, h, Phi, O):
     nminus1 = n - 1
     (L, i, j) = (list(range(n)), 0, 0)
     (inc_L, inc_cost) = ([], 1e6)
-    times = 0
-    while L != []:
+    times = 1
+    while L != [] and times < 300:
         print("\n")
         print("#", times)
         print("L = %s, Status: (%s -> %s)"%(L, i, j))
@@ -117,7 +115,7 @@ def gcdo(n, h, Phi, O):
         print("* [Estimation] Disjoint Manifested Ordering:", [o["name"] for o in OL.values()])
 
         # Solve for True Cost if the Estimation is Very Low
-        if costL <= inc_cost:
+        if costL < inc_cost:
             costL, OL = h(L)
             O.update(OL)
             print("* [True] Cost = ", costL)
@@ -125,7 +123,6 @@ def gcdo(n, h, Phi, O):
             OL = manifest_orderings(L, Phi, O)
             print("* [Refine] Cost = ", sum([o["MVC"] for o in OL.values()]))
             print("* [Refine] Disjoint Manifested Ordering:", [o["name"] for o in OL.values()])
-
 
         # Update Incumbent if Better Solution Found
         if costL < inc_cost:
@@ -138,19 +135,25 @@ def gcdo(n, h, Phi, O):
         print("* Desired Reduction = %s"%(reduction))
         l = level(L)
         # Standard Next Move
-        # Same-cluster Sibling
-        if nminus1 * i + j == nminus1 * l: next_i, next_j = L.index(l), L.index(l)+1
         # Child with the same cluster
-        elif (j < nminus1): (next_i, next_j) = (i, j + 1)
+        if (i < l) and (j < nminus1):
+            print("# Same Cluster Child")
+            (next_i, next_j) = (i, j + 1)
         # Child in the next cluster
-        else: (next_i, next_j) = (i + 1, i + 2)
+        elif (i < l - 1) and (j == nminus1):
+            print("# Next Cluster Child")
+            (next_i, next_j) = (i + 1, i + 2)
+        # Same-cluster Sibling
+        else:
+            print("# Same Cluster Sibling")
+            next_i, next_j = L.index(l), L.index(l)+1
         print("# Standard Next Move (%s -> %s)"%(next_i, next_j))
-        # Find Reducing Move
-        reducing_moves = [((next_i, next_j), 1e6)] + \
-                         [(first_resolving_move(o["PO"], L), o["MVC"]) for o in OL.values()]
-        reducing_moves.sort(key=lambda e: n * e[0][0] + e[0][1])
-        next_i, next_j = first_reducing_move(reducing_moves, reduction+1e6, n)
-        if L[next_i] <= l:
+        # # Find Reducing Move
+        # reducing_moves = [((next_i, next_j), 1e6)] + \
+        #                  [(first_resolving_move(o["PO"], L), o["MVC"]) for o in OL.values()]
+        # reducing_moves.sort(key=lambda e: n * e[0][0] + e[0][1])
+        # next_i, next_j = first_reducing_move(reducing_moves, reduction+1e6, n)
+        if next_i < nminus1:
             i, j = 0, 0
             print("# Apply (%s -> %s)"%(next_i, next_j))
             L = move(L, next_i, next_j)
@@ -159,6 +162,6 @@ def gcdo(n, h, Phi, O):
             L = parent(L)
             print("# Backtrack")
 
-    print("* Incumbent Solution Returned!", inc_cost, "->", costL)
+    print("* Incumbent Solution Returned!", inc_cost, "=", costL)
     return [inc_L, inc_cost, times]
 
