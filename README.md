@@ -1,5 +1,5 @@
-# CRDO
+# GCDO
 
-This is a code repository of the algorithm Conflict-aware Russian Doll Ordering (CRDO).
+This is a code repository of the algorithm Generalized Conflict-directed Ordering (GCDO).
 
 
