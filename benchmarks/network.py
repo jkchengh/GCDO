@@ -1,20 +1,30 @@
 from gcdo import *
 from random import *
-from timeit import *
-from itertools import product
+from datetime import datetime
 
 from benchmarks.TNCP_h import *
+
+def initial_order_manage(events, idx, group_size):
+    group_idx = int(idx / group_size)
+    in_group_idx = idx % group_size
+    start_idx = (group_idx * 2 * group_size) + in_group_idx
+    end_idx = (group_idx * 2 * group_size) + in_group_idx + group_size
+    # print(idx, group_idx, in_group_idx, start_idx, end_idx)
+    return events[start_idx], events[end_idx]
 
 def generate_TNCP(flow_num = 20, node_num = 3, tc_num = 0, horizon = 3000,
                   edge_loss_lb = 0.08, edge_loss_ub = 0.08,
                   edge_delay_lb = 0.08, edge_delay_ub = 0.08,
-                  edge_bw_lb = 500, edge_bw_ub = 500,
-                  flow_loss_lb = 0.2, flow_loss_ub= 0.6,
-                  flow_delay_lb = 0.2, flow_delay_ub = 0.6,
-                  flow_bw_lb = 300, flow_bw_ub = 600,
+                  edge_bw_lb=500, edge_bw_ub=500,
+                  flow_loss_lb=0.2, flow_loss_ub=0.6,
+                  flow_delay_lb=0.2, flow_delay_ub=0.6,
+                  flow_bw_lb=300, flow_bw_ub=600,
                   flow_duration_lb = 20, flow_duration_ub = 80):
     # Flows
     flows = []
+    events = list(range(2 * flow_num))
+    # shuffle(events)
+    seed(datetime.now())
     for i in range(flow_num):
         src = randint(0, node_num - 1)
         rest = list(range(node_num))
@@ -26,9 +36,9 @@ def generate_TNCP(flow_num = 20, node_num = 3, tc_num = 0, horizon = 3000,
         bw = uniform(flow_bw_lb, flow_bw_ub)
         duration = uniform(flow_duration_lb, flow_duration_ub)
 
-        start, end = 2 * i, 2 * i + 1
-        if i <= 0.5 * flow_num: weight = 1e6
-        else: weight = randint(1, flow_num)
+        start, end = initial_order_manage(events, i, 5)
+        if i > 0.8 * flow_num: weight = 1e6
+        else: weight = 1 # randint(1, 3)
         flows.append([i, start, end, src, dst, loss, delay, bw, duration, weight])
 
     # Edges
@@ -53,18 +63,20 @@ def generate_TNCP(flow_num = 20, node_num = 3, tc_num = 0, horizon = 3000,
         to_event_idx = 2 * to_flow_idx + randint(0, 1)
         tcs.append([1e6, [[from_event_idx, to_event_idx, 1,]]])
 
+
+    return [flows, edges, tcs, node_num, horizon]
+
+def print_TNCP(flows, edges, tcs, node_num):
     print("Print Problem Statistics")
     print("Flows:", len(flows))
     [print(flow) for flow in flows]
     print("Edges:", len(edges))
-    [[print(edges[i][j]) for i,j in product(range(node_num), range(node_num))]]
+    [[print(edges[i][j]) for i, j in product(range(node_num), range(node_num))]]
     print("Temporal Constraints:", len(tcs))
     [print(tc) for tc in tcs]
 
-    return [flows, edges, tcs, node_num, horizon]
-
 # Tests
-def solve_TNCP(flows, edges, tcs, node_num, horizon, alg):
+def solve_TNCP(flows, edges, tcs, PO, node_num, horizon, path = "log", method = "GCDO", timeout = 20):
     flow_num = len(flows)
     events = list(set.union(*[set(flow[1:3]) for flow in flows]))
     event_num = len(events)
@@ -83,76 +95,25 @@ def solve_TNCP(flows, edges, tcs, node_num, horizon, alg):
              "CS": ["F%s_Order" % (flow[0])],
              "MVS": ["F%s_Order" % (flow[0])],
              "MVC": 1e6}
-    h = lambda L: make_TNCP_h(L, flows, edges, tcs, node_num, horizon)
-    if alg == 'GCDO': return gcdo(event_num, h, Phi, O)
+    for i in range(len(PO)):
+        weight, o = PO[i]
+        O["O%s" % (i)] = \
+            {"name": "O%s" % (i),
+             "PO": [(q[1], q[0]) for q in o],
+             "CS": ["O%s" % (i)],
+             "MVS": ["O%s" % (i)],
+             "MVC": weight}
 
-def benchmark():
-    cases = 1
-    node_num = 5
-    flow_nums = [40]
-    f = open("Cases%s_Nodes%s.txt"%(cases, node_num), "a")
+    h = lambda L: make_TNCP_h(L, flows, edges, tcs, PO, node_num, horizon)
 
-    for flow_num in flow_nums:
-        f.write("\n#Flows = %s"%(flow_num))
-        for case in range(cases):
-            flows, edges, tcs, node_num, horizon \
-                = generate_TNCP(flow_num = flow_num, node_num = node_num, tc_num = 0, horizon = 3000,
-                                  edge_loss_lb = 0.08, edge_loss_ub = 0.08,
-                                  edge_delay_lb = 0.08, edge_delay_ub = 0.08,
-                                  edge_bw_lb = 500, edge_bw_ub = 500,
-                                  flow_loss_lb = 0.2, flow_loss_ub= 0.2,
-                                  flow_delay_lb = 0.2, flow_delay_ub = 0.2,
-                                  flow_bw_lb = 400, flow_bw_ub = 550,
-                                  flow_duration_lb = 20, flow_duration_ub = 80)
+    if method == "GCDO": [L, cost] = gcdo(event_num, h, Phi, O, path, timeout)
+    elif method == "CDITO": [L, cost] = cdito(event_num, h, Phi, O, path, timeout)
 
-            # GCDO
-            start = default_timer()
-            [L, cost, total_times] = solve_TNCP(flows, edges, tcs, node_num, horizon, 'GCDO')
-            f.write("\n[GCDO]  Obj=%s #O=%s Time=%s"%(cost, total_times, default_timer() - start))
-    f.close()
 
-def gcdo_test1():
-    #[i, start, end, src, dst, loss, delay, bw, duration, weight]
-    flows = [[0, 0, 4, 0, 1, 0.5, 1, 200, 30, 1e6],
-             [1, 1, 2, 0, 1, 3, 1, 360, 30, 5],
-             [2, 1, 3, 0, 1, 3, 0.3, 360, 30, 3]]
-    # [src, dst, loss, delay, bw]
-    edges = [[[0, 0, 0, 0, 10000], [0, 1, 0.1, 0.1, 500], [0, 2, 0.1, 0.5, 500]],
-             [[1, 0, 0.1, 0.1, 500], [0, 0, 0, 0, 10000], [1, 2, 0.1, 0.1, 500]],
-             [[2, 0, 0.1, 0.5, 500], [2, 1, 1, 0.1, 500], [2, 2, 0, 0, 10000]]]
-    tcs = [[1e6, [[2, 3, 20], [3, 2, 20]]]]
-    node_num = 3
-    horizon = 70
-    [L, cost, total_times] = solve_TNCP(flows, edges, tcs, node_num, horizon, 'GCDO')
+    return [L, cost]
 
-def gcdo_test2():
-    #[i, start, end, src, dst, loss, delay, bw, duration, weight]
-    flows = [[0, 0, 4, 0, 1, 0.5, 1, 200, 30, 1e6],
-             [1, 1, 2, 0, 1, 3, 1, 360, 30, 5],
-             [2, 1, 3, 0, 1, 3, 0.3, 360, 30, 3],
-             [3, 0, 4, 0, 1, 3, 1, 360, 30, 1e6]]
-    # [src, dst, loss, delay, bw]
-    edges = [[[0, 0, 0, 0, 10000], [0, 1, 0.1, 0.1, 500], [0, 2, 0.1, 0.5, 500]],
-             [[1, 0, 0.1, 0.1, 500], [0, 0, 0, 0, 10000], [1, 2, 0.1, 0.1, 500]],
-             [[2, 0, 0.1, 0.5, 500], [2, 1, 1, 0.1, 500], [2, 2, 0, 0, 10000]]]
-    tcs = [[1e6, [[2, 3, 20], [3, 2, 20]]],
-           [2, [[4, 1, -70]]]]
-    node_num = 3
-    horizon = 100
-    [L, cost, total_times] = solve_TNCP(flows, edges, tcs, node_num, horizon, 'GCDO')
 
-def gcdo_test3():
-    #[i, start, end, src, dst, loss, delay, bw, duration, weight]
-    flows = [[0, 0, 1, 0, 1, 100, 100, 3000, 1, 1e6],
-             [1, 2, 3, 0, 1, 100, 100, 3000, 1, 1e6]]
-    # [src, dst, loss, delay, bw]
-    edges = [[[0, 0, 0, 0, 10000], [0, 1, 0.1, 0.1, 500], [0, 2, 0.1, 0.5, 500]],
-             [[1, 0, 0.1, 0.1, 500], [0, 0, 0, 0, 10000], [1, 2, 0.1, 0.1, 500]],
-             [[2, 0, 0.1, 0.5, 500], [2, 1, 1, 0.1, 500], [2, 2, 0, 0, 10000]]]
-    tcs = []
-    node_num = 3
-    horizon = 100
-    [L, cost, total_times] = solve_TNCP(flows, edges, tcs, node_num, horizon, 'GCDO')
 
-# benchmark()
-gcdo_test2()
+
+
+

@@ -2,29 +2,29 @@ from math import *
 from gurobi import *
 from itertools import product
 
-def make_TNCP_h(L, flows, edges, tcs, node_num, horizon):
+def make_TNCP_h(L, flows, edges, tcs, PO, node_num, horizon):
     O = {}
-    # TODO: Test Only
-    if L == [1, 2, 3, 0, 4]:
-        O["Time%s" % (L)] = {"name": "Time%s" % (L),
-                             "PO": [(2, 0), (3, 0)],
-                             "CS": ["Time", "T0", "T1"],
-                             "MVS": ["T1"],
-                             "MVC": 1}
-        return 1, O
+    # # TODO: Test Only
+    # if L == [1, 2, 3, 0, 4]:
+    #     O["Time%s" % (L)] = {"name": "Time%s" % (L),
+    #                          "PO": [(2, 0), (3, 0)],
+    #                          "CS": ["Time", "T0", "T1"],
+    #                          "MVS": ["T1"],
+    #                          "MVC": 1}
+    #     return 1, O
     # Partial Orders
-    O.update(extractO_order(L, flows))
-    # cost = sum([o["MVC"] for o in O.values()])
-    # if cost >= 1e6: return cost, O
+    O.update(extractO_order(L, flows, PO))
+    cost = sum([o["MVC"] for o in O.values()])
+    if cost >= 1e6: return cost, O
     # Time
     O.update(extractO_time(L, flows, tcs, horizon))
-    # cost = sum([o["MVC"] for o in O.values()])
-    # if cost >= 1e6: return cost, O
+    cost = sum([o["MVC"] for o in O.values()])
+    if cost >= 1e6: return cost, O
     # State
     O.update(extractO_state(L, flows, edges, node_num))
     return sum([o["MVC"] for o in O.values()]), O
 
-def extractO_order(L, flows):
+def extractO_order(L, flows, PO):
     O = {}
     for flow in flows:
         idx = flow[0]
@@ -38,6 +38,18 @@ def extractO_order(L, flows):
                                    "CS": [constraint_name],
                                    "MVS": [constraint_name],
                                    "MVC": 1e6}
+    for i in range(len(PO)):
+        weight, o = PO[i]
+        hold = False
+        for left, right in o:
+            if L.index(left) < L.index(right): hold = True
+        constraint_name = "O%s"%(i)
+        if not hold: O[constraint_name] = {"name": constraint_name,
+                                           "PO": [(q[1], q[0]) for q in o],
+                                           "CS": [constraint_name],
+                                           "MVS": [constraint_name],
+                                           "MVC": weight}
+
     return O
 
 def extractO_time(L, flows, tcs, horizon):
@@ -82,14 +94,18 @@ def extractO_time(L, flows, tcs, horizon):
     problem.setObjective(sum(weights) - LinExpr(weights, tc_vars), GRB.MINIMIZE)
     problem.optimize()
     if (problem.status == GRB.OPTIMAL):
-        print("- Temporal Consistent")
-        CS = ["Time"] + ["T%s" % (indices[idx]) for idx in range(len(indices))]
-        MVS = ["T%s" % (indices[idx]) for idx in range(len(indices)) if tc_vars[idx].x < 1e-3]
-        return {"Time%s" % (L): {"name": "Time%s" % (L),
-                                 "PO": [(L[idx], L[idx + 1]) for idx in range(len(L) - 1)],
-                                 "CS": CS,
-                                 "MVS": MVS,
-                                 "MVC": problem.objVal}}
+        if problem.objVal > 1e-3:
+            print("- Temporal Suboptimal")
+            CS = ["Time"] + ["T%s" % (indices[idx]) for idx in range(len(indices))]
+            MVS = ["T%s" % (indices[idx]) for idx in range(len(indices)) if tc_vars[idx].x < 1e-3]
+            return {"Time%s" % (L): {"name": "Time%s" % (L),
+                                     "PO": [(L[idx], L[idx + 1]) for idx in range(len(L) - 1)],
+                                     "CS": CS,
+                                     "MVS": MVS,
+                                     "MVC": problem.objVal}}
+        else:
+            print("- Temporal Optimal")
+            return {}
     else:
         print("- Temporal Inconsistent")
         return {"Time%s"%(L): {"name": "Time%s"%(L),
@@ -110,21 +126,22 @@ def extractO_state(L, flows, edges, node_num):
         for i in range(start_idx, end_idx): NCP_sequence[i].append(flow[0])
     # filter left side
     tmp_sequence = []
-    for i in range(len(NCP_sequence)):
+    for i in range(len(NCP_sequence)+1):
         if i == 0: left = set()
         else: left = set(NCP_sequence[i-1])
-        if i == len(NCP_sequence)-1: right = set()
+        if i == len(NCP_sequence): right = set()
         else: right = set(NCP_sequence[i])
         if not left.issubset(right) and left != set(): tmp_sequence.append(left)
     NCP_sequence, tmp_sequence = tmp_sequence, []
     # filter right side
-    for i in range(len(NCP_sequence)):
+    for i in range(len(NCP_sequence)+1):
         if i == 0: left = set()
         else: left = set(NCP_sequence[i-1])
-        if i == len(NCP_sequence)-1: right = set()
+        if i == len(NCP_sequence): right = set()
         else: right = set(NCP_sequence[i])
         if not right.issubset(left) and right!=set(): tmp_sequence.append(right)
     NCP_sequence = tmp_sequence
+    print(NCP_sequence)
 
     # group flows into constraint set
     NCP_groups, NCP_group = [], [NCP_sequence[0]]
@@ -141,6 +158,7 @@ def extractO_state(L, flows, edges, node_num):
         else:
             NCP_group.append(NCP)
     if NCP_group != []: NCP_groups.append(NCP_group.copy())
+
     # solve NCP group
     for NCP_group in NCP_groups:
         problem = Model("NCP")

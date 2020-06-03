@@ -1,4 +1,6 @@
 import networkx as nx
+from util import *
+from timeit import *
 
 def parent(L):
     if L == list(range(len(L))): return []
@@ -21,7 +23,7 @@ def first_resolving_move(o, L):
         # update the move
         if (a <= l) and (n * idx_a + idx_b) < (n * i + j):
             (i, j) = (idx_a, idx_b)
-    if L[i] > l:
+    if i == n or L[i] > l:
         print("# - [Fail] Find Move (%s -> %s)"%(n, n))
         return (n, n)
     else:
@@ -99,12 +101,17 @@ def move(L, i, j):
         elif i > j: newL.insert(j+1, p)
     return newL
 
-def gcdo(n, h, Phi, O):
+def gcdo(n, h, Phi, O, path, timeout):
+    start = default_timer()
     nminus1 = n - 1
     (L, i, j) = (list(range(n)), 0, 0)
     (inc_L, inc_cost) = ([], 1e6)
-    times = 1
-    while L != [] and times < 300:
+    times, htimes = 0, 0
+    while L != []:
+        if default_timer() - start > timeout:
+            print("* Timeout!")
+            write_csv(path, [default_timer() - start, "timeout", inc_cost, times, htimes])
+            return [inc_L, inc_cost]
         print("\n")
         print("#", times)
         print("L = %s, Status: (%s -> %s)"%(L, i, j))
@@ -116,22 +123,28 @@ def gcdo(n, h, Phi, O):
 
         # Solve for True Cost if the Estimation is Very Low
         if costL < inc_cost:
+            htimes = htimes+1
             costL, OL = h(L)
             O.update(OL)
             print("* [True] Cost = ", costL)
             print("* [True] Disjoint Manifested Ordering:", [o["name"] for o in OL.values()])
-            OL = manifest_orderings(L, Phi, O)
-            print("* [Refine] Cost = ", sum([o["MVC"] for o in OL.values()]))
-            print("* [Refine] Disjoint Manifested Ordering:", [o["name"] for o in OL.values()])
 
         # Update Incumbent if Better Solution Found
         if costL < inc_cost:
             print("* Solution Update!", inc_cost, "->", costL)
+            write_csv(path, [default_timer() - start, "update", costL, times, htimes])
+            # write_line(path, "\nBetter Solution = [%s] at Iteration [%s,%s] and Time [%.4f]"
+            #            % (costL, times, htimes, default_timer() - start))
             inc_L, inc_cost = L, costL
         if inc_cost <= 1e-3:
             print("* Optimal Solution Returned!", inc_cost, "->", costL)
-            return [inc_L, inc_cost, times]
-        reduction = costL - inc_cost
+            write_csv(path, [default_timer() - start, "optimal", inc_cost, times, htimes])
+            # write_line(path, "\nIntermediate Solution Found = [%s] at Iteration [%s,%s] and Time [%.4f]"
+            #            % (inc_cost, times, htimes, default_timer() - start))
+            return [inc_L, inc_cost]
+
+        costL = sum([o["MVC"] for o in OL.values()])
+        reduction = costL - inc_cost + 1e6
         print("* Desired Reduction = %s"%(reduction))
         l = level(L)
         # Standard Next Move
@@ -148,11 +161,11 @@ def gcdo(n, h, Phi, O):
             print("# Same Cluster Sibling")
             next_i, next_j = L.index(l), L.index(l)+1
         print("# Standard Next Move (%s -> %s)"%(next_i, next_j))
-        # # Find Reducing Move
-        # reducing_moves = [((next_i, next_j), 1e6)] + \
-        #                  [(first_resolving_move(o["PO"], L), o["MVC"]) for o in OL.values()]
-        # reducing_moves.sort(key=lambda e: n * e[0][0] + e[0][1])
-        # next_i, next_j = first_reducing_move(reducing_moves, reduction+1e6, n)
+        # Find Reducing Move
+        reducing_moves = [((next_i, next_j), 1e6)] + \
+                         [(first_resolving_move(o["PO"], L), o["MVC"]) for o in OL.values()]
+        reducing_moves.sort(key=lambda e: n * e[0][0] + e[0][1])
+        next_i, next_j = first_reducing_move(reducing_moves, reduction, n)
         if next_i < nminus1:
             i, j = 0, 0
             print("# Apply (%s -> %s)"%(next_i, next_j))
@@ -162,6 +175,81 @@ def gcdo(n, h, Phi, O):
             L = parent(L)
             print("# Backtrack")
 
-    print("* Incumbent Solution Returned!", inc_cost, "=", costL)
-    return [inc_L, inc_cost, times]
+    print("* Incumbent Solution Returned!", inc_cost, "for ", inc_L)
+    write_csv(path, [default_timer() - start, "optimal", inc_cost, times, htimes])
+    # write_line(path, "\nSolution Exhausted: [%s] at Iteration [%s,%s] and Time [%.4f]"
+    #            %(inc_cost, times, htimes, default_timer() - start))
+    return [inc_L, inc_cost]
+
+
+def cdito(n, h, Phi, O, path, timeout):
+    start = default_timer()
+    nminus1 = n - 1
+    (L, i, j) = (list(range(n)), 0, 0)
+    (inc_L, inc_cost, inc_time) = ([], 1e6, None)
+    times, htimes = 0, 0
+    while L != []:
+        if default_timer() - start > timeout:
+            print("* Timeout!")
+            write_csv(path, [default_timer() - start, "timeout", inc_cost, times, htimes])
+            return [inc_L, inc_cost]
+        times = times + 1
+        print("\n")
+        print("#", times)
+        print("L = %s, Status: (%s -> %s)" % (L, i, j))
+        OL = manifest_orderings(L, Phi, O)
+        costL = sum([o["MVC"] for o in OL.values() if o["MVC"] > 1e5])
+
+        # Solve for True Cost if the Estimation is Very Low
+        if costL == 0:
+            htimes = htimes + 1
+            costL, OL = h(L)
+            O.update(OL)
+            OL = ([o for o in OL.values() if o["MVC"] > 1e5])
+            print("* [True] Cost = ", costL)
+            print("* [True] Disjoint Manifested Ordering:", [o["name"] for o in OL])
+        else:
+            OL = ([o for o in OL.values() if o["MVC"] > 1e5])
+        # Update Incumbent if Better Solution Found
+        if costL < inc_cost:
+            print("* Solution Update!", inc_cost, "->", costL)
+            write_csv(path, [default_timer() - start, "update", costL, times, htimes])
+            # write_line(path, "\nBetter Solution = [%s] at Iteration [%s,%s] and Time [%.4f]"
+            #            % (costL, times, htimes, default_timer() - start))
+            inc_L, inc_cost, inc_time = L, costL, times
+        if inc_cost <= 1e-3:
+            print("* Optimal Solution Returned!", inc_cost, "->", costL)
+            write_csv(path, [default_timer() - start, "optimal", inc_cost, times, htimes])
+            # write_line(path, "\nIntermediate Solution Found = [%s] at Iteration [%s,%s] and Time [%.4f]"
+            #            % (inc_cost, times, htimes, default_timer() - start))
+            return [inc_L, inc_cost]
+        l = level(L)
+        # Standard Next Move
+        # Child with the same cluster
+        if (i < l) and (j < nminus1):
+            (next_i, next_j) = (i, j + 1)
+        # Child in the next cluster
+        elif (i < l - 1) and (j == nminus1):
+            (next_i, next_j) = (i + 1, i + 2)
+        # Same-cluster Sibling
+        else:
+            next_i, next_j = L.index(l), L.index(l)+1
+        # Find Reducing Move
+
+        reducing_moves = [((next_i, next_j), 1e6)] + \
+                         [(first_resolving_move(o["PO"], L), o["MVC"]) for o in OL]
+        reducing_moves.sort(key=lambda e: n * e[0][0] + e[0][1])
+        reduction = 1e6 * len(reducing_moves)
+        next_i, next_j = first_reducing_move(reducing_moves, reduction - 1, n)
+        if next_i < nminus1:
+            i, j = 0, 0
+            L = move(L, next_i, next_j)
+        else:
+            i, j = l, nminus1
+            L = parent(L)
+    write_csv(path, [default_timer() - start, "optimal", inc_cost, times, htimes])
+    # write_line(path, "\nSolution Exhausted: [%s] at Iteration [%s,%s] and Time [%.4f]"
+    #            %(inc_cost, times, htimes, default_timer() - start))
+    return [inc_L, inc_cost]
+
 
