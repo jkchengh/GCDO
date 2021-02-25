@@ -1,4 +1,5 @@
 from gcdo import *
+from benchmarks.milp import *
 from random import *
 from datetime import datetime
 
@@ -37,7 +38,7 @@ def generate_TNCP(flow_num = 20, node_num = 3, tc_num = 0, horizon = 3000,
         duration = uniform(flow_duration_lb, flow_duration_ub)
 
         start, end = initial_order_manage(events, i, 5)
-        if i > 0.8 * flow_num: weight = 1e6
+        if i >= 0.8 * flow_num: weight = 1e6
         else: weight = 1 # randint(1, 3)
         flows.append([i, start, end, src, dst, loss, delay, bw, duration, weight])
 
@@ -108,7 +109,7 @@ def solve_TNCP(flows, edges, tcs, PO, node_num, horizon, path = "log", method = 
 
     if method == "GCDO": [L, cost] = gcdo(event_num, h, Phi, O, path, timeout)
     elif method == "CDITO": [L, cost] = cdito(event_num, h, Phi, O, path, timeout)
-
+    elif method == "MILP": [L, cost] = milp(flows, edges, tcs, node_num, horizon, path, timeout)
 
     return [L, cost]
 

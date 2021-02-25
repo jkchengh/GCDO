@@ -15,31 +15,31 @@ def benchmark(cases, node_nums, flow_nums):
                 = generate_TNCP(flow_num = flow_num, node_num = node_num, tc_num = 0, horizon = horizon,
                                   edge_loss_lb = 0.1, edge_loss_ub = 0.1,
                                   edge_delay_lb = 0.1, edge_delay_ub = 0.1,
-                                  edge_bw_lb = 500, edge_bw_ub = 500,
+                                  edge_bw_lb = 500, edge_bw_ub = 1000,
                                   flow_loss_lb = 0.15, flow_loss_ub= 0.15,
                                   flow_delay_lb = 0.15, flow_delay_ub = 0.15,
-                                  flow_bw_lb = 400 , flow_bw_ub = 500,
-                                  flow_duration_lb = 20, flow_duration_ub = 20)
-            sys.stdout = open(os.devnull, 'w')
+                                  flow_bw_lb = 300 , flow_bw_ub = 600,
+                                  flow_duration_lb = 20, flow_duration_ub = 80)
+            # sys.stdout = open(os.devnull, 'w')
             # GCDO
             # sys.stdout = open("N%sF%s[%s].log" % (node_num, flow_num, case), 'w')
             # print_TNCP(flows, edges, tcs, node_num)
-            csv_path = os.path.abspath("results/[GCDO]N%sF%s#%s.csv" % (node_num, flow_num, case))
+            # csv_path = os.path.abspath("results/[GCDO]N%sF%s#%s.csv" % (node_num, flow_num, case))
+            # f = open(csv_path, "w+")
+            # f.close
+            # solve_TNCP(flows, edges, tcs, [], node_num, horizon, csv_path, "GCDO", timeout = 30)
+            #
+            # # CDITO
+            # csv_path = os.path.abspath("results/[CDITO]N%sF%s#%s.csv" % (node_num, flow_num, case))
+            # f = open(csv_path, "w+")
+            # f.close
+            # solve_TNCP(flows, edges, tcs, [], node_num, horizon, csv_path, "CDITO", timeout = 30)
+
+            # MILP
+            csv_path = os.path.abspath("results/[MILP]N%sF%s#%s.csv" % (node_num, flow_num, case))
             f = open(csv_path, "w+")
             f.close
-            solve_TNCP(flows, edges, tcs, [], node_num, horizon, csv_path, "GCDO", timeout = 30)
-
-            # CDITO
-            csv_path = os.path.abspath("results/[CDITO]N%sF%s#%s.csv" % (node_num, flow_num, case))
-            f = open(csv_path, "w+")
-            f.close
-            solve_TNCP(flows, edges, tcs, [], node_num, horizon, csv_path, "CDITO", timeout = 30)
-
-
-
-cases = 50
-node_nums = [3]
-flow_nums = [20]
+            solve_TNCP(flows, edges, tcs, [], node_num, horizon, csv_path, "MILP", timeout = 30)
 
 
 def process_simulation_results(cases, node_nums, flow_nums):
@@ -100,6 +100,11 @@ def process_simulation_results(cases, node_nums, flow_nums):
             #          iters_for_subopt / subopt_num,
             #          itersh_for_subopt / subopt_num))
 
+cases = 10
+node_nums = [6, 6, 6, 6, 6, 6]
+flow_nums = [5, 10, 15, 20, 25, 30]
 
 # benchmark(cases, node_nums, flow_nums)
-process_simulation_results(cases, node_nums, flow_nums)
+# process_simulation_results(cases, node_nums, flow_nums)
+
+benchmark(cases, node_nums, flow_nums)
